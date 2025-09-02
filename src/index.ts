@@ -67,7 +67,7 @@ async function checkFirecrawlSetup(): Promise<void> {
 }
 
 function showHelp(): void {
-  process.stderr.write(`
+  process.stdout.write(`
 Firecrawl Local MCP Server v${VERSION}
 
 Usage:
@@ -93,8 +93,7 @@ Environment Variables:
 }
 
 function showVersion(): void {
-  process.stderr.write(`Firecrawl Local MCP Server v${VERSION}
-`);
+  process.stdout.write(`Firecrawl Local MCP Server v${VERSION}\n`);
 }
 
 // --- Exports & Execution Guard --- 
@@ -136,95 +135,35 @@ function parseCliArgs(): { command: string | undefined } {
   return { command };
 }
 
-// Only run CLI logic if not using stdio transport or if explicit commands are given
-const args = process.argv.slice(2);
-const hasTransportFlag = args.includes('--transport');
-const transportType = hasTransportFlag ? 
-  args[args.indexOf('--transport') + 1] : 
-  (process.env.TRANSPORT || 'stdio');
-
+// CLI logic here (run always)
 const { command } = parseCliArgs();
 
-// In stdio mode, route all console logs to stderr to avoid stdout JSON pollution
-if (transportType === 'stdio') {
-  // Hint to any child process manager to avoid inheriting stdout
-  process.env.MCP_STDIO_MODE = 'true';
-
-  // Route console.* to stderr to avoid stdout pollution
-  const toStderr = (...args: any[]) => {
-    try {
-      process.stderr.write(args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ') + '\n');
-    } catch {
-      process.stderr.write(args.join(' ') + '\n');
-    }
-  };
-  console.log = toStderr as any;
-  console.info = toStderr as any;
-  console.warn = toStderr as any;
-  console.debug = toStderr as any;
-
-  // Guardrail: only allow JSON (objects/arrays) on stdout; divert everything else to stderr
-  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-  process.stdout.write = ((chunk: any, encoding?: any, cb?: any) => {
-    try {
-      const s = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
-      const trimmed = s.trimStart();
-      // Allow JSON-RPC payloads (objects/arrays); divert other text
-      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        return originalStdoutWrite(chunk as any, encoding as any, cb as any);
-      }
-      // Non-JSON text -> stderr
-      process.stderr.write(chunk as any);
-      if (typeof cb === 'function') cb();
-      return true;
-    } catch {
-      return originalStdoutWrite(chunk as any, encoding as any, cb as any);
-    }
-  }) as any;
-  console.info = toStderr as any;
-  console.warn = toStderr as any;
-  console.debug = toStderr as any;
-}
-
-// If using stdio transport and no explicit command, just run main()
-if (transportType === 'stdio' && !command) {
-  main().catch((error) => {
-    process.stderr.write(`Failed to start server: ${error}
-`);
-    process.exit(1);
-  });
-} else {
-  // Handle explicit commands
-  switch (command) {
-    case "setup":
-      checkFirecrawlSetup().catch((error) => {
-        process.stderr.write(`Setup check failed: ${error}
-`);
-        process.exit(1);
-      });
-      break;
-    case "start":
-    case void 0:
-      main().catch((error) => {
-        process.stderr.write(`Failed to start server: ${error}
-`);
-        process.exit(1);
-      });
-      break;
-    case "version":
-    case "--version":
-    case "-v":
-      showVersion();
-      break;
-    case "help":
-    case "--help":
-    case "-h":
-      showHelp();
-      break;
-    default:
-      process.stderr.write(`Unknown command: ${command}
-`);
-      showHelp();
+switch (command) {
+  case "setup":
+    checkFirecrawlSetup().catch((error) => {
+      process.stderr.write(`Setup check failed: ${error}\n`);
       process.exit(1);
-  }
+    });
+    break;
+  case "start":
+  case void 0:
+    main().catch((error) => {
+      process.stderr.write(`Failed to start server: ${error}\n`);
+      process.exit(1);
+    });
+    break;
+  case "version":
+  case "--version":
+  case "-v":
+    showVersion();
+    break;
+  case "help":
+  case "--help":
+  case "-h":
+    showHelp();
+    break;
+  default:
+    process.stderr.write(`Unknown command: ${command}\n`);
+    showHelp();
+    process.exit(1);
 }

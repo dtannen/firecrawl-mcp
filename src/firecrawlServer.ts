@@ -1,30 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 
-// Simple logger that can be disabled for stdio mode
-class Logger {
-    constructor(private enabled: boolean = true) {}
-    
-    log(message: string, ...args: any[]) {
-        if (!this.enabled) return;
-        if (process.env.NODE_ENV !== 'production') {
-            console.error(`[Firecrawl MCP] ${message}`, ...args);
-        }
-    }
-    
-    error(message: string, ...args: any[]) {
-        if (!this.enabled) return;
-        console.error(`[Firecrawl MCP ERROR] ${message}`, ...args);
-    }
-    
-    debug(message: string, ...args: any[]) {
-        if (!this.enabled) return;
-        if (process.env.DEBUG === 'true') {
-            console.error(`[Firecrawl MCP DEBUG] ${message}`, ...args);
-        }
-    }
-}
-
 // Import Firecrawl components
 import { FirecrawlProcessManager, FirecrawlConfig } from './firecrawl/processManager.js';
 import { FirecrawlClient } from './firecrawl/client.js';
@@ -51,7 +27,6 @@ export class FirecrawlMcpServer {
     private processManager: FirecrawlProcessManager;
     private firecrawlClient: FirecrawlClient;
     private config: ServerConfig;
-    private logger: Logger;
 
     // Tool handlers
     private scrapeHandler: ScrapeHandler;
@@ -62,8 +37,6 @@ export class FirecrawlMcpServer {
 
     constructor(config: ServerConfig, firecrawlConfig?: FirecrawlConfig) {
         this.config = config;
-        // Disable logging for stdio transport to prevent stdout pollution
-        this.logger = new Logger(config.transport.type !== 'stdio');
         this.server = new McpServer({
             name: "firecrawl-local",
             version: "1.0.0"
@@ -85,7 +58,7 @@ export class FirecrawlMcpServer {
 
     async initialize(): Promise<void> {
         // 1. Start Firecrawl services
-        this.logger.log('Initializing Firecrawl MCP Server...');
+        console.log('Initializing Firecrawl MCP Server...');
         await this.processManager.start();
 
         // 2. Wait for services to be ready
@@ -111,7 +84,7 @@ export class FirecrawlMcpServer {
         // 4. Set up graceful shutdown
         this.setupGracefulShutdown();
 
-        this.logger.log('Firecrawl MCP Server initialized successfully');
+        console.log('Firecrawl MCP Server initialized successfully');
     }
 
     private extractSchemaShape(schema: any): any {
@@ -145,10 +118,10 @@ export class FirecrawlMcpServer {
                 inputSchema: this.extractSchemaShape(FirecrawlSchemas['firecrawl_scrape'])
             },
             async (args) => {
-                this.logger.debug('Scrape handler received args:', JSON.stringify(args));
+                console.log('[DEBUG] Scrape handler received args:', JSON.stringify(args));
                 // Validate input using our Zod schema
                 const validatedArgs = FirecrawlSchemas['firecrawl_scrape'].parse(args);
-                this.logger.debug('Validated args:', JSON.stringify(validatedArgs));
+                console.log('[DEBUG] Validated args:', JSON.stringify(validatedArgs));
                 return await this.scrapeHandler.runTool(validatedArgs);
             }
         );
@@ -204,12 +177,12 @@ export class FirecrawlMcpServer {
 
     private setupGracefulShutdown(): void {
         const cleanup = async () => {
-            this.logger.log('Shutting down Firecrawl MCP Server...');
+            console.log('Shutting down Firecrawl MCP Server...');
             try {
                 await this.processManager.stop();
-                this.logger.log('Firecrawl services stopped');
+                console.log('Firecrawl services stopped');
             } catch (error) {
-                this.logger.error('Error during shutdown:', error);
+                console.error('Error during shutdown:', error);
             }
             process.exit(0);
         };
@@ -217,13 +190,13 @@ export class FirecrawlMcpServer {
         process.on('SIGINT', cleanup);
         process.on('SIGTERM', cleanup);
         process.on('uncaughtException', (error) => {
-            this.logger.error('Uncaught exception:', error);
+            console.error('Uncaught exception:', error);
             cleanup();
         });
     }
 
     async start(): Promise<void> {
-        this.logger.log('Starting Firecrawl MCP Server...');
+        console.log('Starting Firecrawl MCP Server...');
 
         if (this.config.transport.type === 'stdio') {
             const stdioHandler = new StdioTransportHandler(this.server);
